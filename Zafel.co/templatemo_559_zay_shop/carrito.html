@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Carrito de Compras - Zafel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="assets/css/bootstrap.min.css">
+    <style>
+        .form-section { margin-top: 40px; }
+        #thankYouModal {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); z-index: 9999;
+        }
+        #thankYouModalContent {
+            background: #fff; padding: 30px; max-width: 400px;
+            margin: 100px auto; border-radius: 10px; text-align: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        header h1 a {
+            color: inherit;
+            text-decoration: none;
+            outline: none;
+            cursor: pointer;
+        }
+        header h1 a:hover,
+        header h1 a:focus,
+        header h1 a:active {
+            color: inherit;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <header class="bg-dark text-white py-3 text-center">
+        <h1><a href="index.html">ZAFEL</a></h1>
+    </header>
+
+    <main class="container py-5">
+        <h2 class="mb-4 text-center">🛒 Carrito de Compras</h2>
+        <div id="cart-items" class="row mb-4"></div>
+
+        <div class="border rounded p-4 mb-4">
+            <h4 class="mb-3">📜 Resumen del Pedido</h4>
+            <div id="cart-summary"></div>
+        </div>
+
+        <div class="form-section">
+            <h4 class="mb-3">📋 Datos del Cliente</h4>
+            <form id="payment-form">
+                <div class="row">
+                    <div class="col-md-6 mb-3"><input class="form-control" placeholder="Nombre completo" name="nombre" required></div>
+                    <div class="col-md-6 mb-3"><input class="form-control" type="email" placeholder="Correo electrónico" name="email" required></div>
+                    <div class="col-md-6 mb-3"><input class="form-control" placeholder="Teléfono" name="telefono" required></div>
+                    <div class="col-md-6 mb-3">
+                        <select class="form-control" id="departamento" name="departamento" required>
+                            <option value="">Seleccione Departamento</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <select class="form-control" id="ciudad" name="ciudad" required>
+                            <option value="">Seleccione Ciudad</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3"><input class="form-control" placeholder="Barrio" name="barrio" required></div>
+                    <div class="col-md-6 mb-3"><input class="form-control" placeholder="Dirección" name="direccion" required></div>
+                    <div class="col-md-6 mb-3"><input class="form-control" placeholder="Código Postal" name="codigo_postal" required></div>
+                </div>
+
+                <textarea name="productos" id="productos" style="display:none"></textarea>
+                <input type="hidden" name="time" id="hora_envio">
+
+                <button type="submit" class="btn btn-success btn-lg w-100">⚡ Confirmar pedido</button>
+            </form>
+            
+        </div>
+    </main>
+
+    <!-- Modal de agradecimiento -->
+    <div id="thankYouModal">
+        <div id="thankYouModalContent">
+            <h3 class="text-success">¡Gracias por tu compra!</h3>
+            <p>Tu pedido ha sido recibido. Pronto nos pondremos en contacto contigo. 💚</p>
+            <a href="index.html" class="btn btn-secondary">🏠 Volver a la página principal</a>
+        </div>
+    </div>
+
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+    <script>
+        const departamentosCiudades = {
+            "Antioquia": ["Medellín", "Bello", "Itagüí"],
+            "Atlántico": ["Barranquilla", "Soledad"],
+            "Bolívar": ["Cartagena", "Magangué"],
+            "Cundinamarca": ["Bogotá", "Soacha", "Facatativá"],
+            "Valle del Cauca": ["Cali", "Palmira", "Tuluá"]
+        };
+
+        const departamentoSelect = document.getElementById("departamento");
+        const ciudadSelect = document.getElementById("ciudad");
+
+        for (const depto in departamentosCiudades) {
+            const option = document.createElement("option");
+            option.value = depto;
+            option.textContent = depto;
+            departamentoSelect.appendChild(option);
+        }
+
+        departamentoSelect.addEventListener("change", () => {
+            ciudadSelect.innerHTML = `<option value="">Seleccione Ciudad</option>`;
+            const ciudades = departamentosCiudades[departamentoSelect.value];
+            if (ciudades) {
+                ciudades.forEach(ciudad => {
+                    const option = document.createElement("option");
+                    option.value = ciudad;
+                    option.textContent = ciudad;
+                    ciudadSelect.appendChild(option);
+                });
+            }
+        });
+
+        function renderCart() {
+            const cartProducts = JSON.parse(localStorage.getItem("cartProducts")) || [];
+            const cartItemsContainer = document.getElementById("cart-items");
+            const resumen = document.getElementById("cart-summary");
+            const productosInput = document.getElementById("productos");
+            let total = 0;
+            let resumenTexto = "";
+
+            cartItemsContainer.innerHTML = "";
+
+            if (cartProducts.length === 0) {
+                cartItemsContainer.innerHTML = `<p class="text-muted text-center">Tu carrito está vacío.</p>`;
+                resumen.innerHTML = "";
+                productosInput.value = "";
+            } else {
+                cartProducts.forEach((prod, index) => {
+                    total += parseFloat(prod.price.replace("$", "")) * prod.quantity;
+                    const productHTML = `
+                        <div class="col-md-4 mb-4">
+                            <div class="card">
+                                <img src="${prod.image}" class="card-img-top" alt="${prod.title}">
+                                <div class="card-body">
+                                    <h5>${prod.title}</h5>
+                                    <p>Precio: ${prod.price}</p>
+                                    <p>Cantidad: ${prod.quantity}</p>
+                                    <button class="btn btn-danger btn-sm" onclick="removeProduct(${index})">❌ Quitar</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    cartItemsContainer.innerHTML += productHTML;
+
+                    resumenTexto += `- ${prod.title} x${prod.quantity} - ${prod.price}\n`;
+                });
+
+                resumen.innerHTML = `<strong>Total:</strong> $${total.toFixed(2)}`;
+                productosInput.value = resumenTexto + `\nTotal: $${total.toFixed(2)}`;
+            }
+        }
+
+        function removeProduct(index) {
+            let cartProducts = JSON.parse(localStorage.getItem("cartProducts")) || [];
+            cartProducts.splice(index, 1);
+            localStorage.setItem("cartProducts", JSON.stringify(cartProducts));
+            renderCart();
+        }
+
+        document.addEventListener("DOMContentLoaded", renderCart);
+
+        emailjs.init("Cl-pEIvIGtdGdAsX4");
+
+        document.getElementById("payment-form").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            document.getElementById("hora_envio").value = new Date().toLocaleString("es-CO", {
+                dateStyle: "short",
+                timeStyle: "short"
+            });
+
+            emailjs.sendForm('service_9bnsc2u', 'template_3hwcri3', this)
+                .then(() => {
+                    showThankYouModal();
+                    e.target.reset();
+                    localStorage.removeItem("cartProducts");
+                    renderCart();
+                }, (error) => {
+                    console.error("❌ Error:", error);
+                    alert("❌ Hubo un error al enviar el formulario.");
+                });
+        });
+
+        function showThankYouModal() {
+            document.getElementById("thankYouModal").style.display = "block";
+        }
+    </script>
+
+<script>
+    // Obtén el contador del carrito desde localStorage o inicialízalo en 0
+    let cartCount = parseInt(localStorage.getItem("cartCount")) || 0;
+
+    // Actualiza el contador en la página al cargar
+    const cartCountElement = document.getElementById("cart-count");
+    cartCountElement.textContent = cartCount;
+
+    // Función para agregar un producto al carrito
+    function addToCart() {
+        cartCount++; // Incrementa el contador
+        cartCountElement.textContent = cartCount; // Actualiza el contenido del contador
+        localStorage.setItem("cartCount", cartCount); // Guarda el contador en localStorage
+    }
+
+    // Asocia la función al botón "Add To Cart"
+    document.querySelectorAll(".add-to-cart-btn").forEach(button => {
+        button.addEventListener("click", addToCart);
+    });
+</script>
+<script>
+    function vaciarCarrito() {
+        cartCount = 0;
+        cartCountElement.textContent = cartCount;
+        localStorage.setItem("cartCount", cartCount);
+        // También podrías limpiar otros datos del carrito si los guardas por separado
+        // localStorage.removeItem("carritoProductos");
+    }
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
